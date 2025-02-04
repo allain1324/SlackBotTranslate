@@ -2,8 +2,9 @@
 module.exports = {
   apps: [
     {
-      name: 'slack-translate-bot',
-      script: 'index.js',
+      name: "slack-translate-bot",
+      script: "node",
+      args: "index.js",
       // You can also load from a .env file if you prefer:
       // env_file: '.env',
       // Watch restart if files change (useful for dev):
