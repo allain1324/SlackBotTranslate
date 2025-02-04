@@ -3,6 +3,7 @@ const express = require("express");
 const { createEventAdapter } = require("@slack/events-api");
 const { WebClient } = require("@slack/web-api");
 const axios = require("axios");
+const langdetect = require("langdetect");
 
 // Load env variables
 const port = process.env.PORT || 3000;
@@ -16,12 +17,23 @@ const slackEvents = createEventAdapter(slackSigningSecret);
 // Create a Slack WebClient (used to post messages, etc.)
 const slackClient = new WebClient(slackToken);
 
+function detectLanguage(text) {
+  const detected = langdetect.detect(text);
+  if (detected.length > 0) {
+    const [bestMatch] = detected;
+    return bestMatch.lang; // 'vi', 'ja', 'en', ...
+  }
+  return "und";
+}
+
 // Translation function
-async function translate(text, from, to) {
-  const encodedParams = new URLSearchParams();
-  encodedParams.append("q", text);
-  encodedParams.append("target", to);
-  encodedParams.append("source", from);
+async function translate(text) {
+  const langCode = detectLanguage(text);
+
+  let _from = langCode;
+  let _to = "";
+  if (langCode !== "ja") _to = "ja";
+  if (langCode === "ja") _to = "vi";
 
   const options = {
     method: "POST",
@@ -34,8 +46,8 @@ async function translate(text, from, to) {
     },
     data: {
       text,
-      from,
-      to,
+      from: _from,
+      to: _to,
     },
   };
 
@@ -58,12 +70,11 @@ slackEvents.on("message", async (event) => {
 
   try {
     const mess = event.text;
-    const textEn = await translate(mess, "ja", "en");
-    const textVi = await translate(mess, "ja", "vi");
+    const textRes = await translate(mess);
 
     await slackClient.chat.postMessage({
       channel: event.channel,
-      text: `:flag-gb: ${textEn} \n:flag-vn: ${textVi}`,
+      text: `${textRes}`,
       thread_ts: event.event_ts,
     });
   } catch (error) {
