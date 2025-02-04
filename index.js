@@ -42,7 +42,7 @@ async function translate(text, from, to) {
   try {
     const response = await axios.request(options);
     console.log("Translation response:", response);
-    return response.data.data.trans;
+    return response.data.trans;
   } catch (error) {
     console.error("Translation error:", error);
     return null;
