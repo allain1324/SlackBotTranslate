@@ -72,7 +72,11 @@ slackEvents.on("error", console.error);
 // ====================
 // CREATE EXPRESS APP
 // ====================
-const app = express();;
+const app = express();
+
+// Mount the slackEvents adapter as middleware at /slack/events
+// This means Slack will POST its events to http://localhost:3000/slack/events
+app.use("/slack/events", slackEvents.requestListener());
 
 // Define a root route to return "Server is running"
 app.get("/check", (req, res) => {
