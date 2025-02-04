@@ -1,0 +1,25 @@
+{
+  "name": "slackbottranslate",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@slack/bolt": "^4.2.0",
+    "@slack/events-api": "^3.0.1",
+    "@slack/web-api": "^7.8.0",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "translate": "^3.0.1",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
