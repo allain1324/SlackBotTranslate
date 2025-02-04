@@ -25,14 +25,18 @@ async function translate(text, from, to) {
 
   const options = {
     method: "POST",
-    url: "https://google-translate1.p.rapidapi.com/language/translate/v2",
+    url: "https://google-translate113.p.rapidapi.com/api/v1/translator/text",
     headers: {
-      "content-type": "application/x-www-form-urlencoded",
+      "content-type": "application/json",
       "Accept-Encoding": "application/gzip",
       "X-RapidAPI-Key": apiKey,
-      "X-RapidAPI-Host": "google-translate1.p.rapidapi.com",
+      "X-RapidAPI-Host": "google-translate113.p.rapidapi.com",
     },
-    data: encodedParams,
+    data: {
+      text,
+      from,
+      to,
+    },
   };
 
   try {
