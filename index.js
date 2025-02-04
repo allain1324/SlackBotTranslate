@@ -41,7 +41,7 @@ async function translate(text, from, to) {
 
   try {
     const response = await axios.request(options);
-    return response.data.data.translations[0].translatedText;
+    return response.data.data.trans;
   } catch (error) {
     console.error("Translation error:", error);
     return null;
