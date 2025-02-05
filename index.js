@@ -2,14 +2,16 @@ require("dotenv").config();
 const express = require("express");
 const { createEventAdapter } = require("@slack/events-api");
 const { WebClient } = require("@slack/web-api");
-const axios = require("axios");
 const langdetect = require("langdetect");
+const OpenAI = require("openai");
 
 // Load env variables
 const port = process.env.PORT || 3000;
 const slackSigningSecret = process.env.SLACK_SIGNING_SECRET;
 const slackToken = process.env.SLACK_BOT_TOKEN;
 const apiKey = process.env.API_KEY;
+const gptUrl = process.env.BASE_GPT_URL;
+const nameModel = process.env.NAME_MODEL;
 
 // Create Slack Events adapter
 const slackEvents = createEventAdapter(slackSigningSecret);
@@ -17,47 +19,66 @@ const slackEvents = createEventAdapter(slackSigningSecret);
 // Create a Slack WebClient (used to post messages, etc.)
 const slackClient = new WebClient(slackToken);
 
+// Initialize OpenAI with Qwen
+const openai = new OpenAI({
+  apiKey: apiKey, // Use Alibaba's DashScope API key
+  baseURL: gptUrl,
+});
+
+function removeQuotes(text) {
+  // Sử dụng regex để xóa các ký tự ở đầu và cuối chuỗi
+  return text.replace(/^["「]|["」]$/g, "");
+}
+
 function detectLanguage(text) {
   const detected = langdetect.detect(text);
   if (detected.length > 0) {
-    const [bestMatch] = detected;
-    return bestMatch.lang; // 'vi', 'ja', 'en', ...
+    return detected[0].lang; // 'vi', 'ja', 'en', ...
   }
   return "und";
 }
 
-// Translation function
-async function translate(text) {
-  const langCode = detectLanguage(text);
+function parseSlackMessage(message) {
+  // Regex to match user IDs
+  const userIdRegex = /<@([A-Z0-9]+)>/g;
 
-  let _from = langCode;
-  let _to = "";
-  if (langCode !== "ja") _to = "ja";
-  if (langCode === "ja") _to = "vi";
+  // Extract user IDs
+  let userIds = [];
+  let match;
+  while ((match = userIdRegex.exec(message)) !== null) {
+    userIds.push(match[1]);
+  }
 
-  const options = {
-    method: "POST",
-    url: "https://google-translate113.p.rapidapi.com/api/v1/translator/text",
-    headers: {
-      "content-type": "application/json",
-      "Accept-Encoding": "application/gzip",
-      "X-RapidAPI-Key": apiKey,
-      "X-RapidAPI-Host": "google-translate113.p.rapidapi.com",
-    },
-    data: {
-      text,
-      from: _from,
-      to: _to,
-    },
+  // Remove user tags from message content
+  let cleanContent = message.replace(userIdRegex, "").trim();
+
+  return {
+    userIDTagged: userIds,
+    content: cleanContent,
   };
+}
 
+// Translation function using Qwen
+async function translate(text, from, to) {
   try {
-    const response = await axios.request(options);
-    console.log("Translation response:", response);
-    return response.data.trans;
+    const response = await openai.chat.completions.create({
+      model: nameModel,
+      messages: [
+        {
+          role: "system",
+          content: "Translate the given text to the target language.",
+        },
+        {
+          role: "user",
+          content: `Translate from ${from} to ${to}: "${text}"`,
+        },
+      ],
+    });
+
+    return response.choices?.[0]?.message?.content || "Translation failed.";
   } catch (error) {
     console.error("Translation error:", error);
-    return null;
+    return "Error in translation.";
   }
 }
 
@@ -67,14 +88,27 @@ slackEvents.on("message", async (event) => {
 
   // Ignore bot messages
   if (event.bot_id) return;
+  // const userIDsVi = ["UHAB0GQSV", "U06S7LLLS9J", "UMS2ENKSA", "U03UB5M9988"];
+  const userIDsJp = ["U08BM8M5HDG"];
 
   try {
     const mess = event.text;
-    const textRes = await translate(mess);
+    // const senderId = event.user;
+    const { content, userIDTagged } = parseSlackMessage(mess);
+    const isUserJpTagged = userIDsJp.some((userId) =>
+      userIDTagged.includes(userId)
+    );
+    const langCode = detectLanguage(content);
+    const from = langCode;
+    const to = langCode === "ja" ? "vi" : "ja"; // Translate to Japanese unless input is Japanese
 
+    if (from !== "ja" && !isUserJpTagged) return;
+
+    const textRes = await translate(content, from, to);
+    const textFiltered = removeQuotes(textRes);
     await slackClient.chat.postMessage({
       channel: event.channel,
-      text: `${textRes}`,
+      text: `${textFiltered}`,
       thread_ts: event.event_ts,
     });
   } catch (error) {
@@ -91,7 +125,6 @@ slackEvents.on("error", console.error);
 const app = express();
 
 // Mount the slackEvents adapter as middleware at /slack/events
-// This means Slack will POST its events to http://localhost:3000/slack/events
 app.use("/slack/events", slackEvents.requestListener());
 
 // Define a root route to return "Server is running"

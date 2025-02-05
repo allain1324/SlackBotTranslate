@@ -1,0 +1,16 @@
+version: '3'
+services:
+  slack-bot:
+    build: .
+    ports:
+      - "${PORT}:${PORT}"
+    env_file:
+      - .env
+    environment: 
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - PORT=${PORT}
+      - API_KEY=${API_KEY}
+      - BASE_GPT_URL=${BASE_GPT_URL}
+      - NAME_MODEL=${NAME_MODEL}
+    command: ["node", "index.js"]
