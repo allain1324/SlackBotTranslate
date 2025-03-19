@@ -13,4 +13,5 @@ services:
       - API_KEY=${API_KEY}
       - BASE_GPT_URL=${BASE_GPT_URL}
       - NAME_MODEL=${NAME_MODEL}
+      - BOT_ID=${BOT_ID}
     command: ["node", "index.js"]
