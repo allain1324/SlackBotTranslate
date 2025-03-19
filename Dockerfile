@@ -1,5 +1,14 @@
 # Use Node.js 18 as a base (LTS)
-FROM node:18-alpine
+FROM node:18-slim
+
+# Install build tools and SQLite dependencies using apt-get
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    sqlite3 \
+    libsqlite3-dev \
+  && rm -rf /var/lib/apt/lists/*
 
 # Create app directory in the container
 WORKDIR /app
