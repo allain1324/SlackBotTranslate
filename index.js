@@ -14,6 +14,8 @@ const apiKey = process.env.API_KEY;
 const gptUrl = process.env.BASE_GPT_URL;
 const nameModel = process.env.NAME_MODEL;
 const botId = process.env.BOT_ID;
+const userIDsVi = (process.env.USER_IDS_VN || '').split(',').map(s => s.trim()).filter(Boolean);
+const userIDsJp = (process.env.USER_IDS_JP || '').split(',').map(s => s.trim()).filter(Boolean);
 
 // === Initialize Slack Adapter & Client ===
 const slackEvents = createEventAdapter(slackSigningSecret);
@@ -162,10 +164,6 @@ slackEvents.on("message", async (event) => {
 
   // Ignore bot messages.
   if (event.bot_id || event?.message?.bot_id) return;
-
-  // Lists of user IDs for language groups.
-  const userIDsVi = ["U08A6E7JDNY", "U08C4EXB20M"];
-  const userIDsJp = ["U082GFA0BDW", "U082GEUKZR6", "U08CWDXDG4Q"];
 
   try {
     const messageText = event.text ?? event.message.text;
