@@ -14,8 +14,14 @@ const apiKey = process.env.API_KEY;
 const gptUrl = process.env.BASE_GPT_URL;
 const nameModel = process.env.NAME_MODEL;
 const botId = process.env.BOT_ID;
-const userIDsVi = (process.env.USER_IDS_VN || '').split(',').map(s => s.trim()).filter(Boolean);
-const userIDsJp = (process.env.USER_IDS_JP || '').split(',').map(s => s.trim()).filter(Boolean);
+const userIDsVi = (process.env.USER_IDS_VN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const userIDsJp = (process.env.USER_IDS_JP || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 // === Initialize Slack Adapter & Client ===
 const slackEvents = createEventAdapter(slackSigningSecret);
@@ -40,7 +46,7 @@ const db = new sqlite3.Database("./translation_map.db", (err) => {
        )`,
       (err) => {
         if (err) console.error("Error creating table:", err);
-      }
+      },
     );
   }
 });
@@ -118,7 +124,7 @@ function storeMapping(originalTs, translatedTs, channel) {
     (err) => {
       if (err) console.error("Error inserting mapping:", err);
       else console.log(`Stored mapping for message: ${originalTs}`);
-    }
+    },
   );
 }
 
@@ -132,7 +138,7 @@ function updateMapping(originalTs, translatedTs) {
     (err) => {
       if (err) console.error("Error updating mapping:", err);
       else console.log(`Updated mapping for message: ${originalTs}`);
-    }
+    },
   );
 }
 
@@ -152,7 +158,7 @@ function getMapping(originalTs) {
         } else {
           resolve(row);
         }
-      }
+      },
     );
   });
 }
@@ -169,10 +175,10 @@ slackEvents.on("message", async (event) => {
     const messageText = event.text ?? event.message.text;
     const { content, userIDTagged } = parseSlackMessage(messageText);
     const isUserJpTagged = userIDsJp.some((userId) =>
-      userIDTagged.includes(userId)
+      userIDTagged.includes(userId),
     );
     const isUserViTagged = userIDsVi.some((userId) =>
-      userIDTagged.includes(userId)
+      userIDTagged.includes(userId),
     );
     const isBotTagged = userIDTagged.includes(botId);
     const langCode = detectLanguage(content);
@@ -245,8 +251,115 @@ slackEvents.on("error", console.error);
 
 // === Initialize Express App ===
 const app = express();
+
+// Body parser for interactivity endpoint
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.use("/slack/events", slackEvents.requestListener());
 app.get("/check", (req, res) => res.send("Server is running"));
+
+// === Interactivity & Shortcuts Endpoint ===
+app.post("/slack/interactivity", async (req, res) => {
+  try {
+    // Parse the payload from Slack
+    const payload = JSON.parse(req.body.payload);
+    console.log(
+      "Received interactivity payload:",
+      JSON.stringify(payload, null, 2),
+    );
+
+    // Handle message shortcuts
+    if (
+      payload.type === "message_action" &&
+      payload.callback_id === "translate_message"
+    ) {
+      // Acknowledge the request immediately
+      res.status(200).send();
+
+      const message = payload.message;
+      const userId = payload.user.id;
+      const channelId = payload.channel.id;
+      const originalText = message.text;
+
+      if (!originalText) {
+        await slackClient.chat.postEphemeral({
+          channel: channelId,
+          user: userId,
+          text: "⚠️ Không thể dịch: Tin nhắn trống hoặc không có nội dung văn bản.",
+        });
+        return;
+      }
+
+      // Detect language and determine translation direction
+      const langCode = detectLanguage(originalText);
+      const from = langCode;
+      const to = langCode === "ja" ? "vi" : "ja";
+      let fromLabel, toLabel, labelOriginal, labelTranslated, textMessage;
+
+      if (to === "ja") {
+        fromLabel = "🇻🇳 ベトナム語";
+        toLabel = "🇯🇵 日本語";
+        labelOriginal = "(原文)";
+        labelTranslated = "(翻訳)";
+      } else {
+        fromLabel = "🇯🇵 Tiếng Nhật";
+        toLabel = "🇻🇳 Tiếng Việt";
+        labelOriginal = "(Gốc)";
+        labelTranslated = "(Đã dịch)";
+      }
+
+      // Translate the message
+      const translatedText = await translate(originalText, from, to);
+      const textFiltered = removeQuotes(translatedText);
+
+      if (to === "ja") {
+        textMessage = `原文: ${originalText}\n\n翻訳: ${textFiltered}`;
+      } else {
+        textMessage = `Bản gốc: ${originalText}\n\nBản dịch: ${textFiltered}`;
+      }
+
+      // Send ephemeral message with original and translated text
+      await slackClient.chat.postEphemeral({
+        channel: channelId,
+        user: userId,
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*${fromLabel} ${labelOriginal}:*\n${originalText}`,
+            },
+          },
+          {
+            type: "divider",
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*${toLabel} ${labelTranslated}:*\n${textFiltered}`,
+            },
+          },
+        ],
+        text: textMessage,
+      });
+
+      console.log(
+        `Translated message for user ${userId} in channel ${channelId}`,
+      );
+    } else {
+      // For other interaction types, just acknowledge
+      res.status(200).send();
+    }
+  } catch (error) {
+    console.error("Error handling interactivity:", error);
+    // Make sure to respond to avoid Slack timeout
+    if (!res.headersSent) {
+      res.status(500).send("Internal Server Error");
+    }
+  }
+});
 
 // Start the server.
 app.listen(port, () => {
